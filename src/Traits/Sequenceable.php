@@ -247,9 +247,7 @@ trait Sequenceable
                     return $sequenceModel->isAffectedByRepositioningOf($model);
                 });
 
-            if (static::getAllowNull() && is_null($value)) {
-                static::decrementSequenceValues($modelsToUpdate);
-            } elseif ($model->isMovingUpInSequence()) {
+            if ($model->isMovingUpInSequence()) {
                 static::decrementSequenceValues($modelsToUpdate);
             } else {
                 static::incrementSequenceValues($modelsToUpdate);
@@ -266,7 +264,11 @@ trait Sequenceable
     {
         $originalValue = $originalValue ?? $this->getOriginalSequenceValue();
 
-        return $originalValue && $originalValue < $this->getSequenceValue();
+        if (static::getAllowNull() && is_null($this->getSequenceValue())) {
+            return true;
+        } else {
+            return $originalValue && $originalValue < $this->getSequenceValue();
+        }
     }
 
     /**
