@@ -3,6 +3,7 @@
 namespace Gurgentil\LaravelEloquentSequencer\Traits;
 
 use Gurgentil\LaravelEloquentSequencer\Exceptions\SequenceValueOutOfBoundsException;
+use Gurgentil\LaravelEloquentSequencer\SequencingStrategy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -58,6 +59,13 @@ trait Sequenceable
     {
         $value = $this->getSequenceValue();
 
+        if (static::strategyIn([
+            SequencingStrategy::NEVER,
+            SequencingStrategy::ON_UPDATE,
+        ])) {
+            return;
+        }
+
         if (is_null($value)) {
             $this->{static::getSequenceColumnName()} = $this->getNextSequenceValue();
         }
@@ -76,6 +84,13 @@ trait Sequenceable
      */
     protected function handleSequenceableUpdate(): void
     {
+        if (static::strategyIn([
+            SequencingStrategy::NEVER,
+            SequencingStrategy::ON_CREATE,
+        ])) {
+            return;
+        }
+
         if (! $this->shouldBeSequenced) {
             $this->shouldBeSequenced = true;
 
@@ -84,7 +99,7 @@ trait Sequenceable
 
         $value = $this->getSequenceValue();
 
-        if ((! $this->isDirty(static::getSequenceColumnName()))
+        if (($this->isClean(static::getSequenceColumnName()))
             || (! static::getAllowNull() && is_null($value))) {
             return;
         }
@@ -103,6 +118,14 @@ trait Sequenceable
      */
     protected function handleSequenceableDelete(): void
     {
+        if (static::strategyIn([
+            SequencingStrategy::NEVER,
+            SequencingStrategy::ON_CREATE,
+            SequencingStrategy::ON_UPDATE,
+        ])) {
+            return;
+        }
+
         if (! $this->shouldBeSequenced) {
             $this->shouldBeSequenced = true;
 
@@ -118,9 +141,20 @@ trait Sequenceable
     }
 
     /**
+     * Determine if strategy is in array.
+     *
+     * @param array $strategies
+     * @return bool
+     */
+    protected static function strategyIn(array $strategies): bool
+    {
+        return in_array(config('eloquentsequencer.strategy'), $strategies);
+    }
+
+    /**
      * Determine if new sequence value is out of bounds.
      *
-     * @return boolean
+     * @return bool
      */
     protected function isNewSequenceValueOutOfBounds(): bool
     {
@@ -132,7 +166,7 @@ trait Sequenceable
     /**
      * Determine if updated sequence value is out of bounds.
      *
-     * @return boolean
+     * @return bool
      */
     protected function isUpdatedSequenceValueOutOfBounds(): bool
     {
@@ -142,7 +176,7 @@ trait Sequenceable
         if (static::getAllowNull() && is_null($newValue)) {
             return false;
         } else {
-            return $newValue <= 0
+            return $newValue < static::getInitialSequenceValue()
                 || ! is_null($originalValue) && $newValue > $this->getLastSequenceValue()
                 || is_null($originalValue) && $newValue > $this->getNextSequenceValue();
         }
@@ -177,7 +211,7 @@ trait Sequenceable
     /**
      * Get sequence value.
      *
-     * @return integer|null
+     * @return int|null
      */
     public function getSequenceValue(): ?int
     {
@@ -189,7 +223,7 @@ trait Sequenceable
     /**
      * Get original sequence value.
      *
-     * @return integer|null
+     * @return int|null
      */
     protected function getOriginalSequenceValue(): ?int
     {
@@ -207,9 +241,6 @@ trait Sequenceable
     protected static function updateSequenceablesAffectedBy(Model $model): void
     {
         DB::transaction(function () use ($model) {
-            $value = $model->getSequenceValue();
-            $originalValue = $model->getOriginalSequenceValue();
-
             $modelsToUpdate = $model->getSequence()
                 ->where('id', '!=', $model->id)
                 ->filter(function ($sequenceModel) use ($model) {
@@ -229,7 +260,7 @@ trait Sequenceable
     /**
      * Determine if the model is moving up in the sequence.
      *
-     * @return boolean
+     * @return bool
      */
     protected function isMovingUpInSequence(): bool
     {
@@ -241,7 +272,7 @@ trait Sequenceable
     /**
      * Determine if model is moving down in the sequence.
      *
-     * @return boolean
+     * @return bool
      */
     protected function isMovingDownInSequence(): bool
     {
@@ -254,7 +285,7 @@ trait Sequenceable
      * Indicate if model is affected by the repositioning of another model in the sequence.
      *
      * @param Model $model
-     * @return boolean
+     * @return bool
      */
     protected function isAffectedByRepositioningOf(Model $model): bool
     {
@@ -305,21 +336,28 @@ trait Sequenceable
     /**
      * Get sequence value of the last model in the sequence.
      *
-     * @return integer
+     * @return int|null
      */
-    protected function getLastSequenceValue(): int
+    protected function getLastSequenceValue(): ?int
     {
-        return $this->getSequence()->count();
+        $column = static::getSequenceColumnName();
+
+        return $this->getSequence()->max($column);
     }
 
     /**
      * Get sequence value for the next model in the sequence.
      *
-     * @return integer
+     * @return int
      */
     public function getNextSequenceValue(): int
     {
-        return $this->getLastSequenceValue() + 1;
+        $column = static::getSequenceColumnName();
+        $maxSequenceValue = $this->getSequence()->max($column);
+
+        return $this->getSequence()->count() === 0
+            ? static::getInitialSequenceValue()
+            : $maxSequenceValue + 1;
     }
 
     /**
@@ -398,5 +436,15 @@ trait Sequenceable
         return (array) property_exists(static::class, 'sequenceableKeys')
             ? static::$sequenceableKeys
             : [];
+    }
+
+    /**
+     * Get the value that sequences should start at.
+     *
+     * @return int
+     */
+    protected static function getInitialSequenceValue(): int
+    {
+        return (int) config('eloquentsequencer.initial_value', 1);
     }
 }

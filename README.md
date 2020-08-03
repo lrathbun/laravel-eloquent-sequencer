@@ -20,21 +20,19 @@ php artisan vendor:publish --provider="Gurgentil\LaravelEloquentSequencer\Larave
 
 ### Configuration parameters
 
-You can change the default colum name in `config/eloquentsequencer.php`:
-
-```php
-return [
-    'column_name' => 'position',
-];
-```
-
-You can allow/disallow null values by default in `config/eloquentsequencer.php`:
+You can allow/disallow null values, change the default colum name, the initial value and the sequencing strategy in `config/eloquentsequencer.php`:
 
 ```php
 return [
     'allow_null' => true,
+    'column_name' => 'position',
+    'initial_value' => 1,
+    'strategy' => 'always',
 ];
 ```
+
+The `strategy` configuration determines when sequencing should be triggered and accepts one of the following values: `always`, `on_create`, `on_update` or `never`.
+
 
 ### Model configuration
 
@@ -44,7 +42,7 @@ The `$sequenceable` attribute specifies the sequence column name for the model:
 protected static $sequenceable = 'order';
 ```
 
-The `$allowNull` attribute specifies if the sequence column will allow null values or not (this will take precedence over the default set in the config file). 
+The `$allowNull` attribute specifies if the sequence column will allow null values or not (this will take precedence over the default set in the config file).
 
 ```php
 protected static $allowNull = false;
@@ -85,7 +83,7 @@ class Task extends Model
     protected $fillable = [
         'position',
     ];
-    
+
     protected static $sequenceableKeys = [
         'task_list_id',
     ];

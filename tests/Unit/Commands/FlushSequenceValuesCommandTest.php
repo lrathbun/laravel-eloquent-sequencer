@@ -1,6 +1,6 @@
 <?php
 
-namespace Gurgentil\LaravelEloquentSequencer\Tests\Unit;
+namespace Gurgentil\LaravelEloquentSequencer\Tests\Unit\Commands;
 
 use Exception;
 use Facades\Gurgentil\LaravelEloquentSequencer\Tests\Factories\Factory;
@@ -12,7 +12,7 @@ class FlushSequenceValuesCommandTest extends TestCase
     public function the_flush_command_requires_a_valid_model_name()
     {
         $this->expectException(Exception::class);
-        
+
         $this->artisan('sequence:flush \\\App\\\InvalidModel')
             ->expectsOutput('Class `\\App\\InvalidModel` not found.')
             ->assertExitCode(1);
@@ -29,13 +29,13 @@ class FlushSequenceValuesCommandTest extends TestCase
     /** @test */
     public function the_flush_command_does_not_update_values_that_are_already_null()
     {
-        $group = Factory::of('group')->create();
+        $group = Factory::of('Group')->create();
 
         $items = Factory::of('Item')->times(4)->create(['group_id' => $group->id]);
 
         $items->each(function ($item) {
             $item->update(['position' => null]);
-            
+
             $this->assertNull($item->position);
         });
 
@@ -48,16 +48,16 @@ class FlushSequenceValuesCommandTest extends TestCase
     /** @test */
     public function the_flush_command_flushes_sequence_values()
     {
-        $group = Factory::of('group')->create();
+        $group = Factory::of('Group')->create();
 
         $firstItem = Factory::of('Item')->create(['group_id' => $group->id]);
         $secondItem = Factory::of('Item')->create(['group_id' => $group->id]);
         $thirdItem = Factory::of('Item')->create(['group_id' => $group->id]);
 
         $secondItem->update(['position' => null]);
-        
+
         $thirdItem->update(['position' => null]);
-        
+
         $this->assertNotNull($firstItem->position);
         $this->assertNull($secondItem->position);
         $this->assertNull($thirdItem->position);

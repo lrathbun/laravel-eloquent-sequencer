@@ -2,11 +2,11 @@
 
 namespace Gurgentil\LaravelEloquentSequencer\Tests\Unit;
 
-use Gurgentil\LaravelEloquentSequencer\Exceptions\SequenceValueOutOfBoundsException;
 use Facades\Gurgentil\LaravelEloquentSequencer\Tests\Factories\Factory;
+use Gurgentil\LaravelEloquentSequencer\Exceptions\SequenceValueOutOfBoundsException;
 use Gurgentil\LaravelEloquentSequencer\Tests\TestCase;
 
-class CreateObjectWithSequenceValueOutOfBoundsTest extends TestCase
+class SequenceValueOutOfBoundsOnCreateTest extends TestCase
 {
     /** @test */
     public function it_throws_an_exception_when_the_object_created_has_a_sequence_value_that_is_negative()
@@ -46,6 +46,21 @@ class CreateObjectWithSequenceValueOutOfBoundsTest extends TestCase
 
         Factory::of('Item')->create([
             'position' => 4,
+            'group_id' => $group->id,
+        ]);
+    }
+
+    /** @test */
+    public function it_throws_an_exception_when_the_object_created_has_a_sequence_value_smaller_than_the_initial_value()
+    {
+        config(['eloquentsequencer.initial_vaue' => 10]);
+
+        $group = Factory::of('Group')->create();
+
+        $this->expectException(SequenceValueOutOfBoundsException::class);
+
+        Factory::of('Item')->create([
+            'position' => 9,
             'group_id' => $group->id,
         ]);
     }
