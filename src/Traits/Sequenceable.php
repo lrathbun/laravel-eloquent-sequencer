@@ -7,7 +7,6 @@ use Gurgentil\LaravelEloquentSequencer\SequencingStrategy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 trait Sequenceable
 {
@@ -144,6 +143,7 @@ trait Sequenceable
      * Determine if strategy is in array.
      *
      * @param array $strategies
+     *
      * @return bool
      */
     protected static function strategyIn(array $strategies): bool
@@ -160,7 +160,9 @@ trait Sequenceable
     {
         $newValue = $this->getSequenceValue();
 
-        return $newValue <= 0 || $newValue > $this->getNextSequenceValue();
+        return $newValue < static::getInitialSequenceValue()
+            || $newValue <= 0
+            || $newValue > $this->getNextSequenceValue();
     }
 
     /**
@@ -186,6 +188,7 @@ trait Sequenceable
      * Decrement sequence values from a collection of sequenceable models.
      *
      * @param Collection $models
+     *
      * @return void
      */
     protected static function decrementSequenceValues(Collection $models): void
@@ -199,6 +202,7 @@ trait Sequenceable
      * Increment sequence values from a collection of sequenceable models.
      *
      * @param Collection $models
+     *
      * @return void
      */
     protected static function incrementSequenceValues(Collection $models): void
@@ -236,16 +240,18 @@ trait Sequenceable
      * Update models affected by the repositioning of another model.
      *
      * @param Model $model
+     *
      * @return void
      */
     protected static function updateSequenceablesAffectedBy(Model $model): void
     {
-        DB::transaction(function () use ($model) {
+        $model->getConnection()->transaction(function () use ($model) {
             $modelsToUpdate = $model->getSequence()
                 ->where('id', '!=', $model->id)
                 ->filter(function ($sequenceModel) use ($model) {
                     return $sequenceModel->isAffectedByRepositioningOf($model);
-                });
+                })
+                ->each->withoutSequencing();
 
             if ($model->isMovingUpInSequence()) {
                 static::decrementSequenceValues($modelsToUpdate);
@@ -262,12 +268,12 @@ trait Sequenceable
      */
     protected function isMovingUpInSequence(): bool
     {
-        $originalValue = $originalValue ?? $this->getOriginalSequenceValue();
+        $originalValue = $this->getOriginalSequenceValue();
 
         if (static::getAllowNull() && is_null($this->getSequenceValue())) {
             return true;
         } else {
-            return $originalValue && $originalValue < $this->getSequenceValue();
+            return ! is_null($originalValue) && $originalValue < $this->getSequenceValue();
         }
     }
 
@@ -280,13 +286,14 @@ trait Sequenceable
     {
         $originalValue = $this->getOriginalSequenceValue();
 
-        return $originalValue && $originalValue > $this->getSequenceValue();
+        return ! is_null($originalValue) && $originalValue > $this->getSequenceValue();
     }
 
     /**
      * Indicate if model is affected by the repositioning of another model in the sequence.
      *
      * @param Model $model
+     *
      * @return bool
      */
     protected function isAffectedByRepositioningOf(Model $model): bool
@@ -435,8 +442,8 @@ trait Sequenceable
      */
     protected function getSequenceKeys(): array
     {
-        return (array) property_exists(static::class, 'sequenceableKeys')
-            ? static::$sequenceableKeys
+        return property_exists(static::class, 'sequenceableKeys')
+            ? (array) static::$sequenceableKeys
             : [];
     }
 
@@ -449,4 +456,28 @@ trait Sequenceable
     {
         return (int) config('eloquentsequencer.initial_value', 1);
     }
+
+    /**
+     * Get the primary key for the model.
+     *
+     * @return string
+     */
+    abstract public function getKeyName();
+
+    /**
+     * Determine if the model and all the given attribute(s) have remained the same.
+     *
+     * @param array|string|null $attributes
+     * @return bool
+     */
+    abstract public function isClean($attributes = null);
+
+    /**
+     * Get the model's original attribute values.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed|array
+     */
+    abstract public function getOriginal($key = null, $default = null);
 }

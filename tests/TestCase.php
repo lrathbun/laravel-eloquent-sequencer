@@ -2,57 +2,65 @@
 
 namespace Gurgentil\LaravelEloquentSequencer\Tests;
 
-use Gurgentil\LaravelEloquentSequencer\LaravelEloquentSequencerServiceProvider;
+use Gurgentil\LaravelEloquentSequencer\ServiceProvider;
+use Gurgentil\LaravelEloquentSequencer\Tests\Models\Group;
+use Gurgentil\LaravelEloquentSequencer\Tests\Models\Item;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 
 class TestCase extends OrchestraTestCase
 {
+    protected function getPackageProviders($app): array
+    {
+        return [
+            ServiceProvider::class,
+        ];
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->setUpDatabase();
+        $this->loadMigrationsFrom(__DIR__ . '/database/migrations');
     }
 
-    public static function tearDownAfterClass(): void
+    protected function createSequenceable(Group $sequence, ?int $position = null)
     {
-        parent::tearDownAfterClass();
+        $attributes = ['group_id' => $sequence->id];
 
-        static::resetDatabase();
+        if (! is_null($position)) {
+            $attributes['position'] = $position;
+        }
+
+        return Item::create($attributes);
     }
 
-    protected function getPackageProviders($app)
+    protected function createSequence()
     {
-        return [
-            LaravelEloquentSequencerServiceProvider::class,
-        ];
+        return Group::create();
     }
 
-    protected function getEnvironmentSetUp($app)
+    protected function assertSequenced(array $sequenceables, ?int $initialValue = 1): self
     {
-        $app['config']->set('database.default', 'sqlite');
+        collect($sequenceables)->each(function ($sequenceable, $index) use ($initialValue) {
+            $expectedPosition = $index + $initialValue;
 
-        $app['config']->set('database.connections.sqlite', [
-            'driver' => 'sqlite',
-            'database' => static::getTempDirectory().'/database.sqlite',
-            'prefix' => '',
-        ]);
+            self::assertEquals($expectedPosition, $sequenceable->refresh()->position);
+        });
+
+        return $this;
     }
 
-    protected function setUpDatabase()
+    protected function assertSequenceValue(Item $sequenceable, int $expectedValue): self
     {
-        static::resetDatabase();
+        self::assertEquals($expectedValue, $sequenceable->refresh()->position);
 
-        $this->loadMigrationsFrom(__DIR__.'/database/migrations');
+        return $this;
     }
 
-    protected static function resetDatabase()
+    protected function assertSequenceableCount(Group $sequence, int $expectedCount): self
     {
-        file_put_contents(static::getTempDirectory().'/database.sqlite', null);
-    }
+        self::assertCount($expectedCount, $sequence->refresh()->items);
 
-    protected static function getTempDirectory(): string
-    {
-        return __DIR__.'/temp';
+        return $this;
     }
 }
